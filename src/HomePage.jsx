@@ -1,20 +1,16 @@
 import { useState, useEffect, useRef } from "react";
+import { useMemo } from "react";
+import { FaSearch } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import ProgramListWithDetails from "./ProgramListWithDetails";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import emailjs from "@emailjs/browser";
+import { collection, getDocs, doc, setDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 function UniversityAdmin({ universities, setUniversities }) {
-  const [newUni, setNewUni] = useState("");
-
-  const handleAdd = () => {
-    if (newUni.trim()) {
-      setUniversities([...universities, newUni.trim()]);
-      setNewUni("");
-    }
-  };
-
   const handleDelete = (index) => {
     const updated = [...universities];
     updated.splice(index, 1);
@@ -23,22 +19,19 @@ function UniversityAdmin({ universities, setUniversities }) {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex gap-4 justify-center">
-        <input
-          value={newUni}
-          onChange={(e) => setNewUni(e.target.value)}
-          placeholder="Add new university"
-          className="border p-2 rounded-lg w-64"
-        />
-        <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded">
-          Add
-        </button>
-      </div>
       <ul className="space-y-2">
         {universities.map((uni, index) => (
-          <li key={index} className="flex justify-between items-center border p-2 rounded-lg">
-            <span>{uni}</span>
-            <button onClick={() => handleDelete(index)} className="px-3 py-1 border rounded text-sm">Delete</button>
+          <li key={index} className="border p-3 rounded-lg space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold">{uni.name}</span>
+              <button
+                onClick={() => handleDelete(index)}
+                className="px-3 py-1 border rounded text-sm"
+              >
+                Delete
+              </button>
+            </div>
+            <p className="text-sm text-gray-700">{uni.description}</p>
           </li>
         ))}
       </ul>
@@ -48,16 +41,38 @@ function UniversityAdmin({ universities, setUniversities }) {
 
 export default function Home() {
   const { t, i18n } = useTranslation();
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [programsData, setProgramsData] = useState(null);
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
+  const [flatUniversities, setFlatUniversities] = useState({});
+  const [selectedUniversity, setSelectedUniversity] = useState(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [comparisonList, setComparisonList] = useState([]);
+  // Advanced filter states
+  const [maxTuition, setMaxTuition] = useState(null);
+  const [maxRanking, setMaxRanking] = useState(null);
+  const [onlyWithVideo, setOnlyWithVideo] = useState(false);
+
+  // Video Modal State
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState(null);
+
+  const handlePreviewVideo = (url) => {
+    setCurrentVideoUrl(url);
+    setShowVideoModal(true);
+  };
+
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const langMenuRef = useRef();
   const [universities, setUniversities] = useState([
-    "Eastern Mediterranean University (EMU)",
-    "Near East University (NEU)",
-    "Cyprus International University (CIU)",
-    "Bahçeşehir Cyprus University (BAU)",
-    "Ada Kent University",
-    "Final International University"
+    { name: "Eastern Mediterranean University (EMU)", description: "" },
+    { name: "Near East University (NEU)", description: "" },
+    { name: "Cyprus International University (CIU)", description: "" },
+    { name: "Bahçeşehir Cyprus University (BAU)", description: "" },
+    { name: "Ada Kent University", description: "" },
+    { name: "Final International University", description: "" },
   ]);
 
   const [userMessages, setUserMessages] = useState([]);
@@ -67,8 +82,18 @@ export default function Home() {
       setUserMessages(JSON.parse(saved));
     }
   }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowWelcome(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
   const [galleryImages, setGalleryImages] = useState([]);
   const userFormRef = useRef();
+
+const handleImageUpload = (e) => {
+  const files = Array.from(e.target.files);
+  const imageUrls = files.map((file) => URL.createObjectURL(file));
+  setGalleryImages((prev) => [...prev, ...imageUrls]);
+};
 
 const handleUserFormSubmit = (e) => {
   e.preventDefault();
@@ -110,16 +135,52 @@ const handleUserFormSubmit = (e) => {
         name: "EMU",
         price: 6000,
         ranking: 501,
-        videoUrl: "/videos/medicine-emu.mp4"
+        videoUrl: "/videos/emu-intro.mp4"
+      },
+      {
+        name: "Final",
+        price: 4900,
+        ranking: 760,
+        videoUrl: "/videos/medicine-final.mp4"
       },
       {
         name: "NEU",
         price: 5500,
         ranking: 430,
-        videoUrl: "/videos/medicine-neu.mp4"
+        videoUrl: "/videos/neu-intro.mp4"
+      },
+      {
+        name: "CIU",
+        price: 5300,
+        ranking: 610,
+        videoUrl: "/videos/medicine-ciu.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 5200,
+        ranking: 690,
+        videoUrl: "/videos/medicine-kyrenia.mp4"
+      },
+      {
+        name: "Arucad",
+        price: 5100,
+        ranking: 710,
+        videoUrl: "/videos/medicine-arucad.mp4"
+      },
+      {
+        name: "Ada Kent",
+        price: 5000,
+        ranking: 730,
+        videoUrl: "/videos/medicine-adakent.mp4"
       }
     ],
     Pharmacy: [
+      {
+        name: "EMU",
+        price: 5400,
+        ranking: 490,
+        videoUrl: "/videos/pharmacy-emu.mp4"
+      },
       {
         name: "CIU",
         price: 5200,
@@ -131,30 +192,144 @@ const handleUserFormSubmit = (e) => {
         price: 5100,
         ranking: 450,
         videoUrl: "/videos/pharmacy-neu.mp4"
+      },
+      {
+        name: "Final",
+        price: 4950,
+        ranking: 550,
+        videoUrl: "/videos/pharmacy-final.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 5050,
+        ranking: 570,
+        videoUrl: "/videos/pharmacy-kyrenia.mp4"
+      },
+      {
+        name: "Arucad",
+        price: 4900,
+        ranking: 620,
+        videoUrl: "/videos/pharmacy-arucad.mp4"
+      },
+      {
+        name: "Ada Kent",
+        price: 5000,
+        ranking: 590,
+        videoUrl: "/videos/pharmacy-adakent.mp4"
       }
     ],
     Dentistry: [
       {
         name: "EMU",
-        price: 5800,
-        ranking: 500,
+        price: 10000,
+        ranking: 200,
         videoUrl: "/videos/dentistry-emu.mp4"
+      },
+      {
+        name: "CIU",
+        price: 13500,
+        ranking: 120,
+        videoUrl: "/videos/dentistry-ciu.mp4"
+      },
+      {
+        name: "NEU",
+        price: 14500,
+        ranking: 85,
+        videoUrl: "/videos/dentistry-neu.mp4"
+      },
+      {
+        name: "Arucad",
+        price: 6000,
+        ranking: 700,
+        videoUrl: "/videos/dentistry-arucad.mp4"
+      },
+      {
+        name: "Adakent",
+        price: 5000,
+        ranking: 10000,
+        videoUrl: "/videos/dentistry-adakent.mp4"
+      },
+      {
+        name: "Final",
+        price: 3200,
+        ranking: 500,
+        videoUrl: "/videos/dentistry-final.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 4000,
+        ranking: 400,
+        videoUrl: "/videos/dentistry-kyrenia.mp4"
       }
     ],
     Engineering: [
       {
+        name: "Final",
+        price: 5100,
+        ranking: 690,
+        videoUrl: "/videos/engineering-final.mp4"
+      },
+      {
         name: "CIU",
-        price: 4500,
-        ranking: 650,
+        price: 5800,
+        ranking: 300,
         videoUrl: "/videos/engineering-ciu.mp4"
+      },
+      {
+        name: "NEU",
+        price: 5500,
+        ranking: 250,
+        videoUrl: "/videos/engineering-neu.mp4"
+      },
+      {
+        name: "EMU",
+        price: 6000,
+        ranking: 501,
+        videoUrl: "/videos/engineering-emu.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 5200,
+        ranking: 690,
+        videoUrl: "/videos/engineering-kyrenia.mp4"
       }
     ],
     "Computer Science": [
       {
+        name: "CIU",
+        price: 5000,
+        ranking: 100,
+        videoUrl: "/videos/cs-ciu.mp4"
+      },
+      {
         name: "NEU",
-        price: 4700,
-        ranking: 420,
+        price: 5000,
+        ranking: 100,
         videoUrl: "/videos/cs-neu.mp4"
+      },
+      {
+        name: "EMU",
+        price: 5000,
+        ranking: 200,
+        videoUrl: "/videos/cs-emu.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 5000,
+        ranking: 100,
+        videoUrl: "/videos/cs-kyrenia.mp4"
+      },
+      {
+        name: "Adakent",
+        price: 5000,
+        ranking: 100,
+        videoUrl: "/videos/cs-adakent.mp4"
+      },
+      {
+        name: "Final",
+        price: 5000,
+        ranking: 100,
+        videoUrl: "/videos/cs-final.mp4"
       }
     ],
     Law: [
@@ -168,9 +343,39 @@ const handleUserFormSubmit = (e) => {
     "Business Administration": [
       {
         name: "EMU",
-        price: 5000,
-        ranking: 510,
+        price: 3000,
+        ranking: 100,
         videoUrl: "/videos/business-emu.mp4"
+      },
+      {
+        name: "NEU",
+        price: 3000,
+        ranking: 200,
+        videoUrl: "/videos/business-neu.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 2000,
+        ranking: 100,
+        videoUrl: "/videos/business-kyrenia.mp4"
+      },
+      {
+        name: "Adakent",
+        price: 3000,
+        ranking: 200,
+        videoUrl: "/videos/business-adakent.mp4"
+      },
+      {
+        name: "CIU",
+        price: 3000,
+        ranking: 100,
+        videoUrl: "/videos/business-ciu.mp4"
+      },
+      {
+        name: "Final",
+        price: 3000,
+        ranking: 80,
+        videoUrl: "/videos/business-final.mp4"
       }
     ],
     Psychology: [
@@ -191,10 +396,46 @@ const handleUserFormSubmit = (e) => {
     ],
     Architecture: [
       {
+        name: "EMU",
+        price: 4800,
+        ranking: 510,
+        videoUrl: "/videos/architecture-emu.mp4"
+      },
+      {
+        name: "NEU",
+        price: 4700,
+        ranking: 490,
+        videoUrl: "/videos/architecture-neu.mp4"
+      },
+      {
         name: "CIU",
         price: 4600,
         ranking: 670,
         videoUrl: "/videos/architecture-ciu.mp4"
+      },
+      {
+        name: "Final",
+        price: 4500,
+        ranking: 700,
+        videoUrl: "/videos/architecture-final.mp4"
+      },
+      {
+        name: "Kyrenia",
+        price: 4400,
+        ranking: 730,
+        videoUrl: "/videos/architecture-kyrenia.mp4"
+      },
+      {
+        name: "Ada Kent",
+        price: 4300,
+        ranking: 750,
+        videoUrl: "/videos/architecture-adakent.mp4"
+      },
+      {
+        name: "Arucad",
+        price: 4200,
+        ranking: 760,
+        videoUrl: "/videos/architecture-arucad.mp4"
       }
     ],
     "International Relations": [
@@ -206,33 +447,112 @@ const handleUserFormSubmit = (e) => {
       }
     ]
   };
-
-  const [programsData, setProgramsData] = useState(() => {
-    const saved = localStorage.getItem("programsData");
-    return saved ? JSON.parse(saved) : defaultProgramsData;
-  });
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const imageUrls = files.map((file) => URL.createObjectURL(file));
-    setGalleryImages((prev) => [...prev, ...imageUrls]);
+  const handleUniversityClick = (name) => {
+    const uni = flatUniversities[name.toLowerCase()];
+    if (uni) setSelectedUniversity(uni);
   };
 
+// Load university descriptions from localStorage on mount
   useEffect(() => {
-    return () => {
-      galleryImages.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [galleryImages]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (langMenuRef.current && !langMenuRef.current.contains(event.target)) {
-        setShowLangMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    const savedDescriptions = JSON.parse(localStorage.getItem("universityDescriptions") || "{}");
+    setFlatUniversities(prev => {
+      const updated = { ...prev };
+      Object.entries(savedDescriptions).forEach(([key, value]) => {
+        if (updated[key]) {
+          updated[key].description = value.description;
+        }
+      });
+      return updated;
+    });
   }, []);
 
+  // Fetch university descriptions from Firestore
+  useEffect(() => {
+    const fetchDescriptions = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "universityDescriptions"));
+        const descriptions = {};
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          descriptions[data.name.toLowerCase()] = data.description;
+        });
+
+        setFlatUniversities((prev) => {
+          const updated = { ...prev };
+          for (const key in descriptions) {
+            if (updated[key]) {
+              updated[key].description = descriptions[key];
+            }
+          }
+          return updated;
+        });
+      } catch (err) {
+        console.error("خطا در دریافت توضیحات دانشگاه:", err);
+      }
+    };
+
+    fetchDescriptions();
+  }, []);
+useEffect(() => {
+  const fetchPrograms = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "prices"));
+      const structuredData = {};
+
+      querySnapshot.forEach((docSnap) => {
+        const item = docSnap.data();
+        const id = docSnap.id;
+        if (!structuredData[item.program]) structuredData[item.program] = [];
+        structuredData[item.program].push({
+          id,
+          name: item.name,
+          price: item.price,
+          ranking: item.ranking,
+          videoUrl: item.videoUrl
+        });
+      });
+
+      setProgramsData(structuredData);
+      const flat = {};
+      Object.values(structuredData).flat().forEach((uni) => {
+        flat[uni.name.toLowerCase()] = uni;
+      });
+      setFlatUniversities(flat);
+      // Fetch and merge descriptions after flatUniversities are ready
+      const savedDescriptions = JSON.parse(localStorage.getItem("universityDescriptions") || "{}");
+      const updatedFlat = { ...flat };
+      for (const key in savedDescriptions) {
+        if (updatedFlat[key]) {
+          updatedFlat[key].description = savedDescriptions[key].description || "";
+        }
+      }
+      setFlatUniversities(updatedFlat);
+    } catch (err) {
+      console.error("❌ خطا در دریافت اطلاعات از Firebase:", err);
+      toast.error("خطا در بارگذاری برنامه‌ها");
+    } finally {
+      setLoadingPrograms(false);
+    }
+  };
+
+  fetchPrograms();
+}, []);
+
+  const filteredPrograms = useMemo(() => {
+    if (!programsData) return null;
+    const result = {};
+    Object.entries(programsData).forEach(([program, unis]) => {
+      let matches = unis.filter((uni) => {
+        const textMatch = `${program} ${uni.name}`.toLowerCase().includes(searchTerm.toLowerCase());
+        const tuitionOk = !maxTuition || uni.price <= maxTuition;
+        const rankingOk = !maxRanking || uni.ranking <= maxRanking;
+        const videoOk = !onlyWithVideo || !!uni.videoUrl;
+        return textMatch && tuitionOk && rankingOk && videoOk;
+      });
+      if (matches.length) result[program] = matches;
+    });
+    return result;
+  }, [searchTerm, programsData, maxTuition, maxRanking, onlyWithVideo]);
   // برای ذخیره قیمت‌ها
   const defaultPrices = {
     consultation: 50,
@@ -240,11 +560,25 @@ const handleUserFormSubmit = (e) => {
     visa: 150,
     universitySelection: 200
   };
-  
+
   const [prices, setPrices] = useState(() => {
     const saved = localStorage.getItem("pricesData");
     return saved ? JSON.parse(saved) : defaultPrices;
   });
+
+  // --- Rankings state and handler ---
+  const [rankings, setRankings] = useState(() => {
+    const saved = localStorage.getItem("rankingsData");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const handleRankingChange = (e, key) => {
+    const value = e.target.value;
+    setRankings((prev) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
 
   const handlePriceChange = (e, key) => {
     const value = e.target.value;
@@ -283,15 +617,50 @@ const handleUserFormSubmit = (e) => {
                 <button onClick={() => i18n.changeLanguage("fa")} className="w-full text-left px-4 py-2 hover:bg-gray-100">🇮🇷 فارسی</button>
                 <button onClick={() => i18n.changeLanguage("tr")} className="w-full text-left px-4 py-2 hover:bg-gray-100">🇹🇷 Türkçe</button>
                 <button onClick={() => i18n.changeLanguage("ru")} className="w-full text-left px-4 py-2 hover:bg-gray-100">🇷🇺 Русский</button>
+                <button onClick={() => i18n.changeLanguage("ar")} className="w-full text-left px-4 py-2 hover:bg-gray-100" dir="rtl">🇸🇦 العربية</button>
               </div>
             )}
           </div>
         </div>
       </header>
-
+      {selectedUniversity && (
+  <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg max-w-xl w-full relative text-center">
+      <button
+        onClick={() => setSelectedUniversity(null)}
+        className="absolute top-2 right-2 text-gray-700 hover:text-red-500 text-xl font-bold"
+      >
+        ✕
+      </button>
+      <h2 className="text-2xl font-bold mb-4">{selectedUniversity.name}</h2>
+      <p className="mb-4">{selectedUniversity.description || "📘 توضیحاتی برای این دانشگاه ثبت نشده."}</p>
+      <p className="text-gray-600 mb-2">🎓 رتبه: {selectedUniversity.ranking}</p>
+      <p className="text-gray-600 mb-4">💵 شهریه: ${selectedUniversity.price}</p>
+      {selectedUniversity.videoUrl && (
+        <div className="mt-4">
+          <video
+            src={selectedUniversity.videoUrl}
+            controls
+            className="w-full max-w-md mx-auto rounded"
+          />
+        </div>
+      )}
+      {selectedUniversity.website && (
+        <a
+          href={selectedUniversity.website}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:underline"
+        >
+          🔗 سایت دانشگاه
+        </a>
+      )}
+    </div>
+  </div>
+)}
       {/* لیست قیمت جدید */}
       <section id="pricing" className="py-24 text-center">
-        <h3 className="text-4xl font-bold mb-10">Our Price List</h3>
+        <h3 className="text-4xl font-bold mb-10">{t("priceListTitle")}</h3>
         <table className="mx-auto table-auto border-collapse">
           
         {showAdminPanel && (
@@ -299,6 +668,7 @@ const handleUserFormSubmit = (e) => {
     <button
       onClick={() => {
         localStorage.setItem("pricesData", JSON.stringify(prices));
+        localStorage.setItem("rankingsData", JSON.stringify(rankings));
         toast.success("changes saved successfully");
       }}
       className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
@@ -309,13 +679,13 @@ const handleUserFormSubmit = (e) => {
 )}
           <thead>
             <tr className="border-b">
-              <th className="px-6 py-3 text-lg font-semibold">Service</th>
-              <th className="px-6 py-3 text-lg font-semibold">Price</th>
+              <th className="px-6 py-3 text-lg font-semibold">{t("service")}</th>
+              <th className="px-6 py-3 text-lg font-semibold">{t("price")}</th>
             </tr>
           </thead>
           <tbody>
             <tr className="border-b">
-              <td className="px-6 py-3">Consultation Fee</td>
+              <td className="px-6 py-3">{t("consultationFee")}</td>
               <td className="px-6 py-3">
                 {showAdminPanel ? (
                   <input
@@ -325,12 +695,12 @@ const handleUserFormSubmit = (e) => {
                     className="w-24 p-2 border rounded"
                   />
                 ) : (
-                  `$${prices.consultation}`
+                  t("free")
                 )}
               </td>
             </tr>
             <tr className="border-b">
-              <td className="px-6 py-3">Application Fee</td>
+              <td className="px-6 py-3">{t("applicationFee")}</td>
               <td className="px-6 py-3">
                 {showAdminPanel ? (
                   <input
@@ -340,12 +710,12 @@ const handleUserFormSubmit = (e) => {
                     className="w-24 p-2 border rounded"
                   />
                 ) : (
-                  `$${prices.application}`
+                  t("free")
                 )}
               </td>
             </tr>
             <tr className="border-b">
-              <td className="px-6 py-3">Visa Assistance</td>
+              <td className="px-6 py-3">{t("visaAssistance")}</td>
               <td className="px-6 py-3">
                 {showAdminPanel ? (
                   <input
@@ -355,12 +725,12 @@ const handleUserFormSubmit = (e) => {
                     className="w-24 p-2 border rounded"
                   />
                 ) : (
-                  `$${prices.visa}`
+                  t("free")
                 )}
               </td>
             </tr>
             <tr className="border-b">
-              <td className="px-6 py-3">University Selection</td>
+              <td className="px-6 py-3">{t("universitySelection")}</td>
               <td className="px-6 py-3">
                 {showAdminPanel ? (
                   <input
@@ -370,7 +740,7 @@ const handleUserFormSubmit = (e) => {
                     className="w-24 p-2 border rounded"
                   />
                 ) : (
-                  `$${prices.universitySelection}`
+                  t("free")
                 )}
               </td>
             </tr>
@@ -439,28 +809,126 @@ const handleUserFormSubmit = (e) => {
       </section>
 
       <section id="programs" className="py-24 max-w-6xl mx-auto text-center animate-fade-in">
-  <h3 className="text-4xl font-bold mb-10">Our Programs</h3>
-
-  <ProgramListWithDetails
-    programsData={programsData}
-    isAdmin={showAdminPanel}
-    onApply={(updatedData) => {
-      setProgramsData(updatedData);
-      localStorage.setItem("programsData", JSON.stringify(updatedData));
-    }}
-  />
-</section>
+        <h3 className="text-4xl font-bold mb-10">{t("ourPrograms")}</h3>
+        <div className="flex justify-center mb-6">
+          <div className="relative w-full max-w-xl">
+            <input
+              type="text"
+              placeholder={t("searchPlaceholder")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full p-3 pl-10 border rounded-lg shadow-sm"
+            />
+            <FaSearch className="absolute left-3 top-3 text-gray-400" />
+          </div>
+        </div>
+        <div className="flex justify-center gap-4 mb-8">
+          <input
+            type="number"
+            placeholder={t("maxTuition")}
+            className="p-2 border rounded w-40"
+            onChange={(e) => setMaxTuition(+e.target.value)}
+          />
+          <input
+            type="number"
+            placeholder={t("maxRanking")}
+            className="p-2 border rounded w-40"
+            onChange={(e) => setMaxRanking(+e.target.value)}
+          />
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              onChange={(e) => setOnlyWithVideo(e.target.checked)}
+            />
+            <span>{t("onlyWithVideo")}</span>
+          </label>
+        </div>
+        <div>
+          {loadingPrograms ? (
+            <p className="text-gray-500">در حال بارگذاری...</p>
+          ) : programsData ? (
+            <ProgramListWithDetails
+              programsData={filteredPrograms}
+              isAdmin={showAdminPanel}
+              onApply={(updatedData) => {
+                setProgramsData(updatedData);
+                localStorage.setItem("programsData", JSON.stringify(updatedData));
+              }}
+              onPreviewVideo={handlePreviewVideo}
+              onCompareSelect={(uniKey) => {
+                setComparisonList((prev) => {
+                  if (prev.includes(uniKey)) return prev;
+                  if (prev.length >= 2) return prev;
+                  return [...prev, uniKey];
+                });
+              }}
+            />
+          ) : (
+            <p className="text-red-500">هیچ داده‌ای یافت نشد.</p>
+          )}
+        </div>
+        {/* Video Modal */}
+        {showVideoModal && currentVideoUrl && (
+          <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm z-50 flex justify-center items-center">
+            <div className="bg-white rounded-lg overflow-hidden shadow-xl w-full max-w-3xl relative">
+              <button
+                onClick={() => {
+                  setShowVideoModal(false);
+                  setCurrentVideoUrl(null);
+                }}
+                className="absolute top-3 right-4 text-2xl text-gray-700 hover:text-red-600"
+              >
+                ✕
+              </button>
+              <video src={currentVideoUrl} controls autoPlay className="w-full h-auto" />
+            </div>
+          </div>
+        )}
+        {/* Comparison Section */}
+        {comparisonList.length === 2 && (
+          <section className="mt-12 max-w-4xl mx-auto text-center border p-6 rounded-lg shadow-lg bg-white">
+            <h4 className="text-2xl font-bold mb-6">🏆 Compare Universities</h4>
+            <div className="grid grid-cols-2 gap-6 text-left">
+              {comparisonList.map((uniKey) => {
+                const uni = flatUniversities[uniKey];
+                return (
+                  <div key={uniKey} className="border rounded-lg p-4 bg-gray-50">
+                    <h5 className="text-xl font-semibold mb-2">{uni.name}</h5>
+                    <p><strong>Ranking:</strong> {uni.ranking}</p>
+                    <p><strong>Tuition:</strong> ${uni.price}</p>
+                    <p className="mt-2 text-sm text-gray-600">{uni.description || "No description provided."}</p>
+                    {uni.videoUrl && (
+                      <button
+                        onClick={() => handlePreviewVideo(uni.videoUrl)}
+                        className="mt-4 px-4 py-2 text-sm bg-blue-500 text-white rounded"
+                      >
+                        Preview Video
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setComparisonList([])}
+              className="mt-6 px-6 py-2 bg-red-500 text-white rounded"
+            >
+              Clear Comparison
+            </button>
+          </section>
+        )}
+      </section>
 
       <section id="universities" className="py-24 max-w-6xl mx-auto text-center">
         <h3 className="text-4xl font-bold mb-10">Top Universities</h3>
-        <ul className="text-lg text-gray-700 space-y-4">
-          <li><a href="https://www.emu.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">🎓 EMU</a></li>
-          <li><a href="https://neu.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">🏫 NEU</a></li>
-          <li><a href="https://www.ciu.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">🏫 CIU</a></li>
-          <li><a href="https://baucyprus.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">🎯 BAU</a></li>
-          <li><a href="https://adakent.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">📚 Ada Kent</a></li>
-          <li><a href="https://www.final.edu.tr" target="_blank" className="flex items-center justify-center gap-2 hover:text-blue-600">🧠 Final</a></li>
-        </ul>
+        <ul className="text-lg text-gray-700 space-y-4 flex flex-col items-center">
+  <li><button onClick={() => handleUniversityClick("EMU")} className="flex items-center justify-center gap-2 hover:text-blue-600">🎓 EMU</button></li>
+  <li><button onClick={() => handleUniversityClick("NEU")} className="flex items-center justify-center gap-2 hover:text-blue-600">🏫 NEU</button></li>
+  <li><button onClick={() => handleUniversityClick("CIU")} className="flex items-center justify-center gap-2 hover:text-blue-600">🏫 CIU</button></li>
+  <li><button onClick={() => handleUniversityClick("BAU")} className="flex items-center justify-center gap-2 hover:text-blue-600">🎯 BAU</button></li>
+  <li><button onClick={() => handleUniversityClick("Ada Kent")} className="flex items-center justify-center gap-2 hover:text-blue-600">📚 Ada Kent</button></li>
+  <li><button onClick={() => handleUniversityClick("Final")} className="flex items-center justify-center gap-2 hover:text-blue-600">🧠 Final</button></li>
+</ul>
       </section>
 
       <section id="about" className="py-24 max-w-4xl mx-auto text-center">
@@ -514,7 +982,66 @@ const handleUserFormSubmit = (e) => {
             </button>
           </form>
         ) : (
-          <UniversityAdmin universities={universities} setUniversities={setUniversities} />
+          <>
+            <UniversityAdmin universities={universities} setUniversities={setUniversities} />
+            {/* University Descriptions Admin Form */}
+            <section className="mt-10">
+              <h4 className="text-2xl font-bold mb-4">📝 University Descriptions</h4>
+              {Object.entries(flatUniversities).map(([key, uni]) => (
+                <div key={key} className="mb-6 p-4 border rounded shadow-sm bg-white">
+                  <h5 className="font-bold text-lg mb-2">{uni.name}</h5>
+                  <textarea
+                    className="w-full border p-2 rounded"
+                    rows={3}
+                    placeholder="Enter description..."
+                    value={uni.description || ""}
+                    onChange={(e) => {
+                      const updated = { ...flatUniversities };
+                      updated[key] = {
+                        ...updated[key],
+                        description: e.target.value,
+                      };
+                      setFlatUniversities(updated);
+                    }}
+                  />
+                </div>
+              ))}
+              <button
+                className="mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={async () => {
+                  try {
+                    // Save universityDescriptions to Firestore
+                    for (const key in flatUniversities) {
+                      const uni = flatUniversities[key];
+                      await setDoc(doc(db, "universityDescriptions", key), {
+                        name: uni.name,
+                        description: uni.description || "",
+                      });
+                    }
+                    // Save prices and rankings to Firestore under adminSettings/general
+                    await setDoc(doc(db, "adminSettings", "general"), {
+                      prices,
+                      rankings,
+                    });
+                    // Save to localStorage as well
+                    const localDescriptions = {};
+                    for (const key in flatUniversities) {
+                      localDescriptions[key] = { description: flatUniversities[key].description || "" };
+                    }
+                    localStorage.setItem("universityDescriptions", JSON.stringify(localDescriptions));
+                    localStorage.setItem("pricesData", JSON.stringify(prices));
+                    localStorage.setItem("rankingsData", JSON.stringify(rankings));
+                    toast.success("✅ همه اطلاعات با موفقیت ذخیره شد!");
+                  } catch (error) {
+                    console.error("خطا در ذخیره اطلاعات:", error);
+                    toast.error("❌ خطا در ذخیره اطلاعات");
+                  }
+                }}
+              >
+                Save All Descriptions
+              </button>
+            </section>
+          </>
         )}
       </section>
 
@@ -547,6 +1074,27 @@ const handleUserFormSubmit = (e) => {
         </a>
       </footer>
       <ToastContainer position="top-center" autoClose={3000} />
+      <AnimatePresence>
+        {showWelcome && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
+            className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 1.2, ease: "easeInOut" }}
+              className="text-center"
+            >
+              <h2 className="text-4xl font-extrabold text-black">Welcome</h2>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

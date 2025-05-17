@@ -6,6 +6,7 @@ import en from "./locales/en/translation.json";
 import fa from "./locales/fa/translation.json";
 import tr from "./locales/tr/translation.json";
 import ru from "./locales/ru/translation.json";
+import ar from "./locales/ar/translation.json";
 
 i18n
   .use(LanguageDetector)
@@ -15,7 +16,8 @@ i18n
       en: { translation: en },
       fa: { translation: fa },
       tr: { translation: tr },
-      ru: { translation: ru }
+      ru: { translation: ru },
+      ar: { translation: ar }
     },
     fallbackLng: "en",
     interpolation: {
